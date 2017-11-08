@@ -96,6 +96,13 @@ int main(void) {
     //initializing motor state
     k = 1;
     
+    /*
+    turn wheel motors on opposite directions
+    stop when photosensor hits a threshold
+    turn wheel forward with no time limit until switches go high
+    go to backing up state
+    */
+    
     TRISBbits.TRISB9=0; //setting pin #13, direction control for ?right? motor
     TRISBbits.TRISB8=0; //Setting pin #12, direction control for ?left? motor
     LATBbits.LATB9=0; // _LATB9=0 causes the ?right? motor to go ?forward?          VERFIY THESE
