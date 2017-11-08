@@ -56,7 +56,7 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
         state = BACKWARD;
         
         /*
-         turn on motor driver
+         turn on turret motor driver
          set photodiode sensor threshold
          
          
@@ -81,7 +81,13 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
         state = FORWARD;
     }
 
+    /*
+    shooter photodiode threshold interrupt
+    -save position
+    -set shooter motor pwm to 0
+    -set low threshold to detect if light changes
     
+    */
     
     TimeActive = DegreesTurned * 1.0 / 225.0;
     //Modify this equation with motor parameters to determine how long the motors will be on (TimeActive) in order to rotate a desired angle (DegreesTurned)
