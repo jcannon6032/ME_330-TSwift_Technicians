@@ -54,6 +54,13 @@ void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
     {
         _LATB7 = 0; //turn off (sleep) wheel motor driver
         state = BACKWARD;
+        
+        /*
+         turn on motor driver
+         set photodiode sensor threshold
+         
+         
+         */
     }
     
     //this runs when the robot is driving into the corner and the timer runs out
@@ -97,10 +104,10 @@ int main(void) {
     k = 1;
     
     /*
-    turn wheel motors on opposite directions
-    stop when photosensor hits a threshold
-    turn wheel forward with no time limit until switches go high
-    go to backing up state
+    -turn wheel motors on opposite directions
+    -stop when photosensor hits a threshold
+    -turn wheel forward with no time limit until switches go high
+    -go to backing up state
     */
     
     TRISBbits.TRISB9=0; //setting pin #13, direction control for ?right? motor
