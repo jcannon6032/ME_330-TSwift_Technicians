@@ -1,0 +1,92 @@
+/*
+ * File:   BaseMobility.c
+ * Author: jrcannon
+ *
+ * Created on October 24, 2017, 10:51 AM
+ */
+
+//This code builds off of BaseMobility4 it is intended to demonstrate turret motion and sensing
+
+#include "xc.h"
+
+#pragma config FNOSC = LPFRC //500kHz oc = 250kHz clock
+
+
+
+volatile float DegreesTurned = 0;   
+volatile double TimeActive = 0; 
+volatile int Pulses = 0;
+
+enum {FORWARD,BACKWARD} state;
+
+
+
+void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
+{
+    _T1IF = 0;
+    TMR1=0;
+    
+    if (state == BACKWARD)
+    {
+        _LATA1 = 0;
+        PR1 = num_PWM_pulses (180);
+        TMR1=0;
+        state = FORWARD;
+    }
+    else if (state == FORWARD)
+    {
+        _LATA1 = 1;
+        PR1 = num_PWM_pulses (180);
+        TMR1=0;
+        
+        state = BACKWARD;
+    }
+    
+}
+
+//this function returns the number of PWM pulses required for the motor to turn a specified number of degrees
+int num_PWM_pulses (int Degrees_Turned)
+{
+    TimeActive = Degrees_Turned * 1.0 / 225.0 * 4.0; // for quarter step size
+    //Modify this equation with motor parameters to determine how long the motors will be on (TimeActive) in order to rotate a desired angle (DegreesTurned)
+    //250000 (clock time) / 2000 (PWM frequency) = steps per second *1.8 (degrees per step if full step) = degrees per second = 225
+    Pulses = TimeActive*3906.0;
+    return Pulses;
+}
+
+int main(void) {
+    
+    OC3CON1 = 0;                                                                                                                                                                                                                                                                                                                                                                                                               
+    OC3CON2 = 0;
+    OC3RS = 1999;
+    OC3R = 1000;
+    OC3CON1bits.OCTSEL = 0b111; 
+    OC3CON2bits.SYNCSEL = 0x1F;
+    OC3CON2bits.OCTRIG = 0;
+    OC3CON1bits.OCM = 0b110;
+    
+    
+    //setting pin 3 as the turret direction pin
+    TRISAbits.TRISA1=0;
+    LATAbits.LATA1=1; //1 is CCW, 0 is CW
+    
+    
+
+    //configuring the turret timer
+    _TON = 1;
+    _TCS = 0;
+    _TCKPS = 0b10;
+    _T1IP = 4;
+    _T1IE = 1;
+    _T1IF = 0;
+    PR1 = num_PWM_pulses (180);
+   
+    TMR1=0;
+    
+    state = BACKWARD;
+    
+    while (1)
+    {}
+    
+    return 0;
+}
