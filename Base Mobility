@@ -1,0 +1,139 @@
+/*
+ * File:   BaseMobility.c
+ * Author: svoss
+ *
+ * Created on October 24, 2017, 10:51 AM
+ */
+
+//This code builds off of BaseMobility3. I'm trying to now incorporate the change interrupt for the switches
+// This works! do not edit
+
+#pragma config FNOSC = LPFRC
+
+#include "xc.h"
+
+volatile float DegreesTurned = 0;
+    
+volatile double TimeActive = 0;
+    
+volatile int Pulses = 0;
+
+
+/*Alright boys, I'm not super sure what I'm doing here. The robot needs to be programed to initially be driving forward.
+ Then we need a change interrupt which is triggered by RB13 (Pin 16) going high. The interrupt should make the robot stop,
+ then start driving backward for a specified number of degrees. At the end, the robot should stop. So maybe no time interrupt
+ necessary for this one? Help*/
+
+enum {FORWARD,BACKWARD} state;
+
+void __attribute__((interrupt, no_auto_psv)) _CNInterrupt(void)
+{
+  _CNIF=0;
+  
+  
+  if (_RB13==1)
+     {
+          DegreesTurned = 2420;
+          _LATB9 = 1;
+          _LATB8 = 0;
+     }
+  
+   TimeActive = DegreesTurned * 1.0 / 450.0;
+    
+   Pulses = TimeActive*3906.0; //This is for full step size. Double this number for half step size
+    
+   PR1 = Pulses;
+  
+   TMR1=0;
+   
+   state = BACKWARD;
+}
+
+void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
+{
+    _T1IF = 0;
+    TMR1=0;
+    
+    if (state = BACKWARD)
+    {
+        _LATB7 = 0;
+        state = BACKWARD;
+    }
+    if (state = FORWARD)
+    {
+        _LATB8 = 0;
+        _LATB9 = 1;
+        _LATB7 = 1;
+        TimeActive = DegreesTurned * 1.0 / 450.0;
+    
+        Pulses = TimeActive*3906.0; //This is for full step size. Double this number for half step size
+    
+        PR1 = Pulses;
+  
+        TMR1=0;
+        
+        state = FORWARD;
+    }
+    
+}
+
+//250000 (clock time) / 1000 (PWM frequency) = steps per second *1.8 (degrees per step if full step) = degrees per second = 450
+
+int main(void) {
+    
+    OC1CON1 = 0;    
+    OC1CON2 = 0;
+    
+    OC1RS = 1999;
+    
+    OC1R = 1000;
+    
+    TRISBbits.TRISB9=0; //setting the direction pin as an output
+    LATBbits.LATB9=0; //1 is CCW, 0 is CW
+    TRISBbits.TRISB8=0; //setting the direction pin as an output
+    LATBbits.LATB8=1; //Drive forward
+    TRISBbits.TRISB13=1; //Setting the switch reader as an input
+    ANSBbits.ANSB13=0; //Digital
+    
+    OC1CON1bits.OCTSEL = 0b111; 
+    
+    OC1CON2bits.SYNCSEL = 0x1F;
+    
+    OC1CON2bits.OCTRIG = 0;
+    
+    OC1CON1bits.OCM = 0b110;
+    
+    DegreesTurned = 10000;
+    
+    TimeActive = DegreesTurned * 0.0022222;
+    
+    Pulses = TimeActive*3906.0; //Double this for half step or for double frequency 
+    
+    _TRISB7 = 0;
+    
+    _LATB7 = 1;
+    
+    _TON = 1;
+    _TCS = 0;
+    _TCKPS = 0b10;
+    
+    _T1IP = 4;
+    _T1IE = 1;
+    _T1IF = 0;
+    PR1 = Pulses;
+    
+    _CN13IE = 1;
+    _CN13PUE = 0;
+    _CNIP = 6;
+    _CNIE = 1;
+    _CNIF = 0;
+    
+    TMR1=0;
+    
+    state = FORWARD;
+    
+    while (1)
+    {}
+    
+    return 0;
+}
