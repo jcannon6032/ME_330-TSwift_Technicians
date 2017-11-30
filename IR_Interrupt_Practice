@@ -1,0 +1,109 @@
+/*
+ * File:   IR_Interrupt_Practice.c
+ * Author: ME
+ *
+ * Created on November 30, 2017, 3:38 PM
+ */
+
+
+#include "xc.h"
+#pragma config FNOSC = LPFRC //500kHz oc = 250kHz clock
+#pragma config OSCIOFNC = OFF
+#pragma config SOSCSRC = DIG
+#define FCY 250000 //Instruction clock rate
+#include <libpic30.h>
+
+
+//this configures the interrupt for the IR GOAL sensor
+void __attribute__((interrupt, no_auto_psv)) _ADC1Interrupt(void)
+{
+    TRISAbits.TRISA6 = 0; 
+    LATAbits.LATA6 = 1; //turning on an LED
+    
+    _CHH0 = 0; //clearing the hit bit
+    
+    _AD1IF = 0;
+    _AD1IE = 0; //disabling the interrupt so it doesn't trigger again
+    
+}
+
+void IR_corner_sensor_config (void)
+{
+   /*** Configure Desired Port Pins as Analog Inputs ***/
+	TRISAbits.TRISA3 = 1;		//Configure pin 8 as an input
+	ANSAbits.ANSA3 = 1;			// ?? Configure pin 8 as an input
+
+
+	/*** Select Voltage Reference Source ***/
+	// use AVdd for positive reference
+	_PVCFG = 0b00;		// AVdd reference
+	// use AVss for negative reference
+	_NVCFG = 0;			// AD1CON2<13>
+
+
+	/*** Select Analog Conversion Clock Rate ***/
+	// make sure Tad is at least 600ns, see Table 29-41 datasheet
+	_ADCS = 0b00011111;	// 00111111 = 32·TCY = TAD
+
+
+	/*** Select Sample/Conversion Sequence ***/
+	// use auto-convert
+	_SSRC = 0b0101;		// AD1CON1<7:4>, pg. 211 datasheet
+	// ^^^ THIS IS DIFFERENT THAN NON-INTERRUPT
+	_ASAM = 1;			// AD1CON1<2>
+	// choose a sample time >= 1 Tad, see Table 29-41 datasheet
+	_SAMC = 0b00010;		// Sample time = 2 TAD
+
+	/*** Choose Analog Channels to be Used ***/
+	_CSCNA = 1;			// scan inputs
+	// choose which channels to scan, e.g. for ch AN12, set _CSS12 = 1;
+	_CSS14 = 1;			// Should be scanning Channel 14
+
+
+	/*** Select How Results are Presented in Buffer ***/
+	// set 12-bit resolution
+	_MODE12 = 1;		// Why not?
+	_FORM = 00;			//absolute decimal format
+    
+	// load results into buffer determined by converted channel, e.g. ch AN12 
+    _BUFREGEN = 1;		//?? results appear in ADC1BUF15
+
+
+	/*** Select Interrupt Rate ***/
+	// interrupt rate should reflect number of analog channels used, e.g. if 
+    // 5 channels, interrupt every 5th sample
+	_SMPI = 0b00001;		// Interrupts at the completion of the conversion for every other sample
+
+	//AD1CON5 register, specific to ADC interrupt
+    _ASEN = 1;              //auto scan enabled
+    _ASINT = 0b11;          //interrupt after sequence completion on valid compare
+    _WM = 0b01;             //convert and save results when match occurs
+    AD1CON5bits.CM = 0b01;  //greater than compare mode
+    
+    //setting thresholds
+    ADC1BUF0 = 2000;
+    
+    
+    /*** Turn on A/D Module ***/
+	_ADON = 1;			// AD1CON1<15> 
+    
+    __delay_ms(5);
+    _AD1IF = 0;
+    _AD1IE = 1;
+    _AD1IP = 6;
+}
+
+
+
+
+
+int main(void) {
+    
+    IR_corner_sensor_config ();
+    
+    while(1)
+    {
+        
+    }
+    return 0;
+}
