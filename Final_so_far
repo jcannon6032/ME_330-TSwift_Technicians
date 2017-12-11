@@ -1,0 +1,414 @@
+/*
+ * File:   Ball Collection Code.c
+ * Author: bfotheri
+ *
+ * Created on November 30, 2017, 9:40 AM
+ */
+
+
+#include "xc.h"
+#pragma config FNOSC = LPFRC //500kHz oc = 250kHz clock
+#pragma config OSCIOFNC = OFF
+#pragma config SOSCSRC = DIG
+#define FCY 250000 //Instruction clock rate
+#include <libpic30.h>
+
+
+volatile float DegreesTurned = 0;   
+volatile double TimeActive = 0; 
+volatile int Pulses = 0;
+volatile int IsServoOn = 0; 
+
+static int turret_IR_threshold = 400;
+static int corner_IR_threshold = 300;
+
+int num_PWM_pulses_wheel (int Degrees_Turned);
+void wheel_PWM_config (void);
+void wheel_timer_config (void);
+void IR_corner_sensor_config (void);
+void switches_config (void);
+void servo_PWM_config (void);
+void IR_goal_sensor_config (void);
+
+enum {GOLEFT, GORIGHT, GOCENTER} direction;
+
+void wheel_PWM_config (void)
+{
+    OC1CON1 = 0;  //pin 14, controls both motors PWM
+    OC1CON2 = 0;
+    OC1RS = 499; //this is a PWM frequency of 500 Hz (250,000/500)
+    OC1R = 250;
+    OC1CON1bits.OCTSEL = 0b111;      
+    OC1CON2bits.SYNCSEL = 0x1F;
+    OC1CON2bits.OCTRIG = 0;          
+    OC1CON1bits.OCM = 0b110;
+    
+    //Direction control, pins 12, 13
+    TRISBbits.TRISB9=0; //setting pin #13, direction control for ?right? motor
+    TRISBbits.TRISB14=0; //Setting pin #10, direction control for ?left? motor
+    LATBbits.LATB9=0; // _LATB9=0 causes the ?right? motor to go ?forward?          VERFIY THESE
+    LATBbits.LATB14=0; // _LATB8= 1 causes the ?left? motor to go ?forward?
+    
+    
+    __delay_ms(400);
+    //Setting up pin 11, the wheel motor sleep pin
+    _TRISB7 = 0;
+    _LATB7 = 1; //motor active  
+    
+    
+    while(ADC1BUF14 < corner_IR_threshold) //corner IR threshold
+    {
+    
+    }
+        LATBbits.LATB14 = 1; //setting the wheels to turn in the same direction
+
+    __delay_ms(1000);    
+    OC1RS = 1999; //this is a PWM frequency of 500 Hz (250,000/500)
+    OC1R = 1000;
+}
+
+void turret_config (void) 
+{
+    //this configures the PWM for the turret stepper motor
+    OC3CON1 = 0;    //corresponds to pin 5                                                                                                                                                                                                                                                                                                                                                                                                          
+    OC3CON2 = 0;
+    OC3RS = 999;
+    OC3R = 500;
+    OC3CON1bits.OCTSEL = 0b111; 
+    OC3CON2bits.SYNCSEL = 0x1F;
+    OC3CON2bits.OCTRIG = 0;
+    OC3CON1bits.OCM = 0b110;
+    
+    
+    //setting pin 3 as the turret direction pin
+    TRISAbits.TRISA1=0;
+    LATAbits.LATA1=1; //1 is CCW, 0 is CW
+    
+    
+
+    //configuring the turret timer
+    _TON = 1;
+    
+    
+    
+    
+    
+    
+    
+    
+    _TCS = 0;
+    _TCKPS = 0b10;
+    _T1IP = 4;
+    _T1IE = 1;
+    _T1IF = 0;
+    PR1 = num_PWM_pulses (90);
+    
+    // Turing on the shooter motor
+    
+    _TRISA0 = 0;
+    _ANSA0 =0;
+    _LATA0 = 1; 
+   
+    TMR1=0;
+    
+    direction = GOCENTER;
+}
+
+void IR_goal_sensor_config (void)
+{
+  {
+   /*** Configure Desired Port Pins as Analog Inputs ***/
+	TRISBbits.TRISB4 = 1;		//Configure pin 8 as an input
+	ANSBbits.ANSB4 = 1;			// ?? Configure pin 8 as an input
+
+
+	/*** Select Voltage Reference Source ***/
+	// use AVdd for positive reference
+	_PVCFG = 0b00;		// AVdd reference
+	// use AVss for negative reference
+	_NVCFG = 0;			// AD1CON2<13>
+
+
+	/*** Select Analog Conversion Clock Rate ***/
+	// make sure Tad is at least 600ns, see Table 29-41 datasheet
+	_ADCS = 0b00011111;	// 00111111 = 32?TCY = TAD
+
+
+	/*** Select Sample/Conversion Sequence ***/
+	// use auto-convert
+	_SSRC = 0b0111;		// AD1CON1<7:4>, pg. 211 datasheet
+	// use auto-sample
+	_ASAM = 1;			// AD1CON1<2>
+	// choose a sample time >= 1 Tad, see Table 29-41 datasheet
+	_SAMC = 0b00010;		// Sample time = 2 TAD
+
+	/*** Choose Analog Channels to be Used ***/
+	_CSCNA = 1;			// scan inputs
+	// choose which channels to scan, e.g. for ch AN12, set _CSS12 = 1;
+	_CSS15 = 1;			// Should be scanning Channel 14
+
+	/*** Select How Results are Presented in Buffer ***/
+	// set 12-bit resolution
+	_MODE12 = 1;		// Why not?
+	_FORM = 00;			//absolute decimal format
+    
+	// load results into buffer determined by converted channel, e.g. ch AN12 
+    _BUFREGEN = 1;		//?? results appear in ADC1BUF15
+
+
+	/*** Select Interrupt Rate ***/
+	// interrupt rate should reflect number of analog channels used, e.g. if 
+    // 5 channels, interrupt every 5th sample
+	_SMPI = 0b00001;		// Interrupts at the completion of the conversion for every other sample
+
+	/*** Turn on A/D Module ***/
+	_ADON = 1;			// AD1CON1<15> 
+}
+}
+
+void IR_corner_sensor_config (void)
+{
+  {
+   /*** Configure Desired Port Pins as Analog Inputs ***/
+	TRISAbits.TRISA3 = 1;		//Configure pin 8 as an input
+	ANSAbits.ANSA3 = 1;			// ?? Configure pin 8 as an input
+
+
+	/*** Select Voltage Reference Source ***/
+	// use AVdd for positive reference
+	_PVCFG = 0b00;		// AVdd reference
+	// use AVss for negative reference
+	_NVCFG = 0;			// AD1CON2<13>
+
+
+	/*** Select Analog Conversion Clock Rate ***/
+	// make sure Tad is at least 600ns, see Table 29-41 datasheet
+	_ADCS = 0b00011111;	// 00111111 = 32?TCY = TAD
+
+
+	/*** Select Sample/Conversion Sequence ***/
+	// use auto-convert
+	_SSRC = 0b0111;		// AD1CON1<7:4>, pg. 211 datasheet
+	// use auto-sample
+	_ASAM = 1;			// AD1CON1<2>
+	// choose a sample time >= 1 Tad, see Table 29-41 datasheet
+	_SAMC = 0b00010;		// Sample time = 2 TAD
+
+	/*** Choose Analog Channels to be Used ***/
+	_CSCNA = 1;			// scan inputs
+	// choose which channels to scan, e.g. for ch AN12, set _CSS12 = 1;
+	_CSS14 = 1;			// Should be scanning Channel 14
+
+
+	/*** Select How Results are Presented in Buffer ***/
+	// set 12-bit resolution
+	_MODE12 = 1;		// Why not?
+	_FORM = 00;			//absolute decimal format
+    
+	// load results into buffer determined by converted channel, e.g. ch AN12 
+    _BUFREGEN = 1;		//?? results appear in ADC1BUF14
+
+
+	/*** Select Interrupt Rate ***/
+	// interrupt rate should reflect number of analog channels used, e.g. if 
+    // 5 channels, interrupt every 5th sample
+	_SMPI = 0b00001;		// Interrupts at the completion of the conversion for every other sample
+
+	/*** Turn on A/D Module ***/
+	_ADON = 1;			// AD1CON1<15> 
+}
+}
+
+//the corner detection switches are connected to pin 13
+void switches_config (void)
+{   
+    //ANSBbits.ANSB14 = 0;
+    TRISBbits.TRISB8=1;
+    _CN22IE = 1; //look at pin 12 to sense a change?
+    _CN22PUE = 0;
+    _CNIP = 2; //priority
+    _CNIE = 1; //enable
+    _CNIF = 0; //flag
+    
+}
+
+//interrupt for switches and poison ball detect
+void __attribute__((interrupt, no_auto_psv)) _CNInterrupt(void)
+{
+  _CNIF=0;
+ 
+ 
+    __delay_ms(100);
+    if(_RB8 == 1) {
+    LATBbits.LATB9=1; // _LATB9=0 causes the ?right? motor to go ?forward?          VERFIY THESE
+    LATBbits.LATB14=0; 
+    wheel_timer_config();
+    }
+    
+  
+  }
+  
+
+//timer 3 is the wheel timer
+void wheel_timer_config (void)
+{
+    OC1RS = 499; //this is a PWM frequency of 500 Hz (250,000/500)
+    OC1R = 250;
+    T3CONbits.TON = 1;
+    T3CONbits.TCS = 0;
+    T3CONbits.TCKPS = 0b10;
+    _T3IP = 4; //priority
+    _T3IE = 1; //enable
+    _T3IF = 0; //flag
+    PR3 = num_PWM_pulses_wheel (360*2.75);
+   
+    TMR3=0;
+}
+
+void __attribute__((interrupt, no_auto_psv)) _T3Interrupt(void)
+{
+    _T3IF = 0;
+    TMR3=0;
+    _T3IE = 0;
+    
+    OC1R = 0; //locking the wheel stepper motors
+    
+   //?? DO 3 degree turn??
+ 
+    //extending the ramp
+    _TRISB2 = 0; //Set Pin 2 as an output
+    _ANSB2 = 0;
+    _LATB2 = 1; //Turn Pin 2 (ramp motor) on //MAKE SURE THIS IS THE PIN WE'RE USING
+    
+    __delay_ms (800); //delay to allow the ramp to extend
+    
+    _LATB2 = 0; //turning off the ramp motor
+    _LATB7 = 0; //turning off the wheel driver
+    
+    __delay_ms(100);
+     //turning on the servo motor
+    servo_PWM_config ();
+
+   
+
+}
+
+void servo_PWM_config (void)
+{
+        
+    _TRISB0 = 0; //Set Pin 2, servo pwm as an output
+    _ANSB0 = 0;
+    
+    
+    //PWM setup for OC2
+    OC2CON1 = 0;    
+    OC2CON2 = 0;
+    OC2RS = 5000;
+    OC2CON1bits.OCTSEL = 0b111; 
+    OC2CON2bits.SYNCSEL = 0x1F;
+    OC2CON2bits.OCTRIG = 0;
+    OC2CON1bits.OCM = 0b110; 
+    
+    IsServoOn = 1;
+    //the servo PWM output is defined in the while loop in the main function
+    
+    //now that the ramp is extended and the servo is on, we begin to search for the goal
+    IR_goal_sensor_config();
+    turret_config();
+}
+
+int num_PWM_pulses (int Degrees_Turned)
+{
+    TimeActive = Degrees_Turned * 1.0 / 450.0 * 2.0; // for half step size
+    //Modify this equation with motor parameters to determine how long the motors will be on (TimeActive) in order to rotate a desired angle (DegreesTurned)
+    //250000 (clock time) / 1000 (PWM frequency) = steps per second *1.8 (degrees per step if full step) = degrees per second = 450
+    Pulses = TimeActive*3906.0;
+    return Pulses;
+}
+
+//this function returns the number of PWM pulses required for the motor to turn a specified number of degrees
+int num_PWM_pulses_wheel (int Degrees_Turned)
+{
+    TimeActive = Degrees_Turned * 1.0 / 900.0; // for full step size
+    //Modify this equation with motor parameters to determine how long the motors will be on (TimeActive) in order to rotate a desired angle (DegreesTurned)
+    //250000 (clock time) / 500 (PWM frequency) = steps per second *1.8 (degrees per step if full step) = degrees per second = 900
+    Pulses = TimeActive*3906.0;
+    return Pulses;
+}
+
+void __attribute__((interrupt, no_auto_psv)) _T1Interrupt(void)
+{
+    _T1IF = 0;
+    TMR1=0;
+    while (ADC1BUF15 > turret_IR_threshold) 
+    {
+        OC3R = 0;
+        TMR1 = 0;
+        
+        OC2R = 400;
+        __delay_ms(200);
+        TMR1 = 0;
+        OC2R = 100;
+        __delay_ms(200);
+        TMR1 = 0;
+      /*  if (Blackball goes hi) {
+            turn turret 5 degrees
+                    delay(500ms)
+                    turn turret back to goal
+        }
+       */      
+       TMR1 = 0;
+    }
+     
+    OC3R = 500;
+    if (direction == GOLEFT)
+    {
+        _LATA1 = 1;
+        PR1 = num_PWM_pulses (90);
+        TMR1=0;
+        direction = GOCENTER;
+        
+    }
+    else if (direction == GORIGHT)
+    {
+        _LATA1 = 0;
+        PR1 = num_PWM_pulses (90);
+        TMR1=0;
+        
+        direction = GOCENTER;
+    }
+    else if (direction == GOCENTER){
+        PR1 = num_PWM_pulses (90);
+        TMR1=0;
+        if(_LATA1 == 1) {
+            direction = GORIGHT;
+        }
+        else if (_LATA1 == 0)
+        {
+            direction = GOLEFT;
+        }
+    }
+        
+}
+
+
+int main(void) {
+    IR_corner_sensor_config();
+    wheel_PWM_config (); //We exit this function once ball dispensing IR gets triggered
+    switches_config();
+
+    
+    while(1)
+    {
+        while (IsServoOn == 1)
+        {
+            OC2R = 400;
+            __delay_ms(200);
+            OC2R = 100;
+            __delay_ms(200);
+        }
+    }
+    
+    
+    return 0;
+}
