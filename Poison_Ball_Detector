@@ -1,0 +1,83 @@
+/*
+ * File:   Poison_ball_code.c
+ * Author: jrcannon
+ *
+ * Created on December 11, 2017, 10:37 AM
+ */
+
+
+#include "xc.h"
+#pragma config FNOSC = LPFRC //500kHz oc = 250kHz clock
+#pragma config OSCIOFNC = OFF
+#pragma config SOSCSRC = DIG
+#define FCY 250000 //Instruction clock rate
+#include <libpic30.h>
+
+void IR_goal_sensor_config (void)
+{
+  {
+   /*** Configure Desired Port Pins as Analog Inputs ***/
+	TRISAbits.TRISA2 = 1;		//Configure pin 8 as an input
+	ANSAbits.ANSA2 = 1;			// ?? Configure pin 8 as an input
+
+
+	/*** Select Voltage Reference Source ***/
+	// use AVdd for positive reference
+	_PVCFG = 0b00;		// AVdd reference
+	// use AVss for negative reference
+	_NVCFG = 0;			// AD1CON2<13>
+
+
+	/*** Select Analog Conversion Clock Rate ***/
+	// make sure Tad is at least 600ns, see Table 29-41 datasheet
+	_ADCS = 0b00011111;	// 00111111 = 32?TCY = TAD
+
+
+	/*** Select Sample/Conversion Sequence ***/
+	// use auto-convert
+	_SSRC = 0b0111;		// AD1CON1<7:4>, pg. 211 datasheet
+	// use auto-sample
+	_ASAM = 1;			// AD1CON1<2>
+	// choose a sample time >= 1 Tad, see Table 29-41 datasheet
+	_SAMC = 0b00010;		// Sample time = 2 TAD
+
+	/*** Choose Analog Channels to be Used ***/
+	_CSCNA = 1;			// scan inputs
+	// choose which channels to scan, e.g. for ch AN12, set _CSS12 = 1;
+	_CSS13 = 1;			// Should be scanning Channel 14
+
+	/*** Select How Results are Presented in Buffer ***/
+	// set 12-bit resolution
+	_MODE12 = 1;		// Why not?
+	_FORM = 00;			//absolute decimal format
+    
+	// load results into buffer determined by converted channel, e.g. ch AN12 
+    _BUFREGEN = 1;		//?? results appear in ADC1BUF15
+
+
+	/*** Select Interrupt Rate ***/
+	// interrupt rate should reflect number of analog channels used, e.g. if 
+    // 5 channels, interrupt every 5th sample
+	_SMPI = 0b00001;		// Interrupts at the completion of the conversion for every other sample
+
+	/*** Turn on A/D Module ***/
+	_ADON = 1;			// AD1CON1<15> 
+}
+}
+
+int main(void) {
+    IR_goal_sensor_config();
+    TRISAbits.TRISA3 = 0;		
+	ANSAbits.ANSA3 = 0;		
+    LATAbits.LATA3 = 1;
+    
+    while(1)
+    {
+        while(ADC1BUF13 < 600) 
+        {
+            _LATA3 = 0;
+        }
+        _LATA3 = 1;
+    }
+    return 0;
+}
